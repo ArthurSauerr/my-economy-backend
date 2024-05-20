@@ -16,3 +16,9 @@ Com isso em mente foi desenvolvido um Backend para que o usuário possa acessar 
 - JWT (Json Web Token)
 - PostgreSQL
 
+## Instalação
+Para instalar as dependências utilize:
+ - npm install
+
+Para rodar o backend utilize:
+ - node src/index.js
