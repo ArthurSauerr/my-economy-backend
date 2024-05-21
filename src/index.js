@@ -164,12 +164,38 @@ app.get('/expense', validateToken, async (req, res) => {
             [userId]
         );
         client.release();
-        res.status(200).json({ expenses: read.rows})
+        res.status(200).json({ expenses: read.rows })
     }catch(error){
         console.error('Erro ao listar despesas', error);
         res.status(500).send('Erro ao listar despesas do usuário!')
     }
 })
+
+app.delete('/expense/delete', validateToken, async (req, res) => {
+    const { id } = req.body;
+
+    try{
+        const client = await pool.connect();
+        const expenseExists = await client.query(
+            'SELECT * FROM expenses WHERE id = $1',
+            [id]
+        );
+        if(expenseExists.rows.length > 0){
+            await client.query(
+                'DELETE FROM expenses WHERE id = $1',
+                [id]
+            );
+            client.release();
+            res.status(200).send('Despesa excluída com sucesso!');
+        }else{
+            client.release();
+            res.status(400).send('Essa despesa não existe!');
+        }
+    }catch(error){
+        console.error('Erro ao excluir despesa', error);
+        res.status(500).send('Erro ao excluir despesa!');
+    }
+});
 
 app.listen(port, () => {
     console.log(`Servidor inicializado em: http://localhost:${port}`);
