@@ -30,7 +30,7 @@ if (!process.env.TOKEN_SECRET) {
 
 function generateAccessToken(email) {
     const payload = { email };
-    return jwt.sign(payload, process.env.TOKEN_SECRET, { expiresIn: '1800s' });
+    return jwt.sign(payload, process.env.TOKEN_SECRET, { expiresIn: '21600s' });
 }
 
 async function validateToken(req, res, next) {
@@ -69,6 +69,12 @@ async function getUserIdFromToken(email) {
     }
 }
 
+const today = new Date();
+const month = today.getMonth() + 1;
+console.log(month);
+//TODO Usuário não pode CRIAR/ATUALIZAR/EXCLUIR de despesa para um mês anterior ao atual!
+
+
 app.post('/signup', async (req, res) => {
     const { name, email, password, birthdate } = req.body;
     const salt = await bcrypt.genSalt(10);
@@ -79,7 +85,7 @@ app.post('/signup', async (req, res) => {
         const userExists = await client.query('SELECT * FROM users WHERE email = $1', [email]);
         if (userExists.rows.length > 0) {
             client.release();
-            return res.status(400).json({ message: 'Usuário já existe!' });
+            return res.status(400).send('Usuário já existe!');
         } else {
             const newUser = await client.query(
                 'INSERT INTO users (name, email, password, birthdate) VALUES ($1, $2, $3, $4) RETURNING *',
@@ -121,12 +127,15 @@ app.post('/signin', async (req, res) => {
     }
 });
 
-app.get('/list', validateToken, async (req, res) => {
-    console.log(req.user);
+app.get('/user', validateToken, async (req, res) => {
+    const userId = req.user.id;
 
     try {
         const client = await pool.connect();
-        const read = await client.query('SELECT * FROM users');
+        const read = await client.query(
+            'SELECT * FROM users WHERE id = $1',
+            [userId]
+        );
         client.release();
         res.status(200).json({ users: read.rows });
     } catch (error) {
@@ -154,7 +163,6 @@ app.post('/expense/create', validateToken, async (req, res) => {
 });
 
 app.get('/expense', validateToken, async (req, res) => {
-    console.log(req.user);
     const userId = req.user.id;
 
     try {
