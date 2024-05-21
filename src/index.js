@@ -147,7 +147,7 @@ app.post('/expense/create', validateToken, async (req, res) => {
         );
         client.release();
         res.status(200).json({ message: 'Despesa cadastrada com sucesso!', expense: newExpense.rows[0] })
-    }catch(error){
+    } catch (error) {
         console.error('Erro ao cadastrar despesa', error);
         res.status(500).send('Erro ao cadastrar despesa!');
     }
@@ -157,7 +157,7 @@ app.get('/expense', validateToken, async (req, res) => {
     console.log(req.user);
     const userId = req.user.id;
 
-    try{
+    try {
         const client = await pool.connect();
         const read = await client.query(
             'SELECT * FROM expenses WHERE user_id = $1', 
@@ -165,33 +165,64 @@ app.get('/expense', validateToken, async (req, res) => {
         );
         client.release();
         res.status(200).json({ expenses: read.rows })
-    }catch(error){
+    } catch (error) {
         console.error('Erro ao listar despesas', error);
         res.status(500).send('Erro ao listar despesas do usuário!')
     }
-})
+});
 
-app.delete('/expense/delete', validateToken, async (req, res) => {
-    const { id } = req.body;
+app.put('/expense/update', validateToken, async (req, res) => {
+    const { id, description, amount } = req.body;
 
-    try{
+    try {
         const client = await pool.connect();
         const expenseExists = await client.query(
             'SELECT * FROM expenses WHERE id = $1',
             [id]
         );
-        if(expenseExists.rows.length > 0){
+        if (expenseExists.rows.length > 0) {
+            if (description == null || amount == null) {
+                client.release();
+                res.status(400).send('Preencha todos os campos!');
+            } else {
+                await client.query(
+                    'UPDATE expenses SET description = $2, amount = $3 WHERE id = $1',
+                    [id, description, amount]
+                );
+                client.release();
+                res.status(200).send('Despesa atualizada com sucesso!');
+            }
+        } else {
+            client.release();
+            res.status(400).send('Essa despesa não existe!');
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar despesa', error);
+        res.status(500).send('Erro ao atualizar despesa!');
+    }
+});
+
+app.delete('/expense/delete', validateToken, async (req, res) => {
+    const { id } = req.body;
+
+    try {
+        const client = await pool.connect();
+        const expenseExists = await client.query(
+            'SELECT * FROM expenses WHERE id = $1',
+            [id]
+        );
+        if (expenseExists.rows.length > 0) {
             await client.query(
                 'DELETE FROM expenses WHERE id = $1',
                 [id]
             );
             client.release();
             res.status(200).send('Despesa excluída com sucesso!');
-        }else{
+        } else {
             client.release();
             res.status(400).send('Essa despesa não existe!');
         }
-    }catch(error){
+    } catch (error) {
         console.error('Erro ao excluir despesa', error);
         res.status(500).send('Erro ao excluir despesa!');
     }
