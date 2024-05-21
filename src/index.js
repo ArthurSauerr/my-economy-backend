@@ -123,6 +123,7 @@ app.post('/signin', async (req, res) => {
 
 app.get('/list', validateToken, async (req, res) => {
     console.log(req.user);
+
     try {
         const client = await pool.connect();
         const read = await client.query('SELECT * FROM users');
@@ -151,6 +152,24 @@ app.post('/expense/create', validateToken, async (req, res) => {
         res.status(500).send('Erro ao cadastrar despesa!');
     }
 });
+
+app.get('/expense', validateToken, async (req, res) => {
+    console.log(req.user);
+    const userId = req.user.id;
+
+    try{
+        const client = await pool.connect();
+        const read = await client.query(
+            'SELECT * FROM expenses WHERE user_id = $1', 
+            [userId]
+        );
+        client.release();
+        res.status(200).json({ expenses: read.rows})
+    }catch(error){
+        console.error('Erro ao listar despesas', error);
+        res.status(500).send('Erro ao listar despesas do usuário!')
+    }
+})
 
 app.listen(port, () => {
     console.log(`Servidor inicializado em: http://localhost:${port}`);
