@@ -71,8 +71,27 @@ async function getUserIdFromToken(email) {
 
 const today = new Date();
 const month = today.getMonth() + 1;
-console.log(month);
-//TODO Usuário não pode CRIAR/ATUALIZAR/EXCLUIR de despesa para um mês anterior ao atual!
+console.log('Mês atual:', month);
+
+async function checkMonth(id){
+    
+    try {
+        const client = await pool.connect();
+        const expenseMonthResult = await client.query(
+            'SELECT EXTRACT (MONTH FROM reference_month) AS month FROM expenses WHERE id = $1',
+            [id]
+        );
+        client.release();
+        if (expenseMonthResult.rows.length > 0) {
+            const expenseMonth = expenseMonthResult.rows[0].month;
+            return expenseMonth < month;
+        }
+        return false;
+    } catch (error) {
+        console.error('Erro na funçao checkMonth', error);
+        return false;
+    }
+}
 
 
 app.post('/signup', async (req, res) => {
@@ -148,7 +167,9 @@ app.post('/expense/create', validateToken, async (req, res) => {
     const { description, amount, reference_month } = req.body;
     const userId = req.user.id;
 
-    try{
+    //TODO realizar validação se o reference_month é mais antigo que o mes atual
+
+    try {
         const client = await pool.connect();
         const newExpense = await client.query(
             'INSERT INTO expenses (description, amount, reference_month, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
@@ -181,58 +202,68 @@ app.get('/expense', validateToken, async (req, res) => {
 
 app.put('/expense/update', validateToken, async (req, res) => {
     const { id, description, amount } = req.body;
+    const isOlderMonth = await checkMonth(id);
 
-    try {
-        const client = await pool.connect();
-        const expenseExists = await client.query(
-            'SELECT * FROM expenses WHERE id = $1',
-            [id]
-        );
-        if (expenseExists.rows.length > 0) {
-            if (description == null || amount == null) {
-                client.release();
-                res.status(400).send('Preencha todos os campos!');
+    if (isOlderMonth) {
+        res.status(400).send('Não é possível atualizar uma despesa antiga!');
+    } else {
+        try {
+            const client = await pool.connect();
+            const expenseExists = await client.query(
+                'SELECT * FROM expenses WHERE id = $1',
+                [id]
+            );
+            if (expenseExists.rows.length > 0) {
+                if (description == null || amount == null) {
+                    client.release();
+                    res.status(400).send('Preencha todos os campos!');
+                } else {
+                    await client.query(
+                        'UPDATE expenses SET description = $2, amount = $3 WHERE id = $1',
+                        [id, description, amount]
+                    );
+                    client.release();
+                    res.status(200).send('Despesa atualizada com sucesso!');
+                }
             } else {
-                await client.query(
-                    'UPDATE expenses SET description = $2, amount = $3 WHERE id = $1',
-                    [id, description, amount]
-                );
                 client.release();
-                res.status(200).send('Despesa atualizada com sucesso!');
+                res.status(400).send('Essa despesa não existe!');
             }
-        } else {
-            client.release();
-            res.status(400).send('Essa despesa não existe!');
+        } catch (error) {
+            console.error('Erro ao atualizar despesa', error);
+            res.status(500).send('Erro ao atualizar despesa!');
         }
-    } catch (error) {
-        console.error('Erro ao atualizar despesa', error);
-        res.status(500).send('Erro ao atualizar despesa!');
     }
 });
 
 app.delete('/expense/delete', validateToken, async (req, res) => {
     const { id } = req.body;
+    const isOlderMonth = await checkMonth(id);
 
-    try {
-        const client = await pool.connect();
-        const expenseExists = await client.query(
-            'SELECT * FROM expenses WHERE id = $1',
-            [id]
-        );
-        if (expenseExists.rows.length > 0) {
-            await client.query(
-                'DELETE FROM expenses WHERE id = $1',
+    if (isOlderMonth) {
+        res.status(400).send('Não é possível excluir uma despesa antiga!')
+    } else {
+        try {
+            const client = await pool.connect();
+            const expenseExists = await client.query(
+                'SELECT * FROM expenses WHERE id = $1',
                 [id]
             );
-            client.release();
-            res.status(200).send('Despesa excluída com sucesso!');
-        } else {
-            client.release();
-            res.status(400).send('Essa despesa não existe!');
+            if (expenseExists.rows.length > 0) {
+                await client.query(
+                    'DELETE FROM expenses WHERE id = $1',
+                    [id]
+                );
+                client.release();
+                res.status(200).send('Despesa excluída com sucesso!');
+            } else {
+                client.release();
+                res.status(400).send('Essa despesa não existe!');
+            }
+        } catch (error) {
+            console.error('Erro ao excluir despesa', error);
+            res.status(500).send('Erro ao excluir despesa!');
         }
-    } catch (error) {
-        console.error('Erro ao excluir despesa', error);
-        res.status(500).send('Erro ao excluir despesa!');
     }
 });
 
