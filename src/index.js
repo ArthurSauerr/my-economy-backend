@@ -73,8 +73,8 @@ const today = new Date();
 const month = today.getMonth() + 1;
 console.log('Mês atual:', month);
 
-async function checkMonth(id){
-    
+async function checkMonth(id) {
+    //Extrai o valor do mes contido na coluna reference_month para comparar com o mes atual
     try {
         const client = await pool.connect();
         const expenseMonthResult = await client.query(
@@ -93,6 +93,7 @@ async function checkMonth(id){
     }
 }
 
+// ------ENDPOINTS USUARIO------
 
 app.post('/signup', async (req, res) => {
     const { name, email, password, birthdate } = req.body;
@@ -163,23 +164,33 @@ app.get('/user', validateToken, async (req, res) => {
     }
 });
 
+// ------ENDPOINTS DESPESAS------
+
 app.post('/expense/create', validateToken, async (req, res) => {
     const { description, amount, reference_month } = req.body;
     const userId = req.user.id;
 
-    //TODO realizar validação se o reference_month é mais antigo que o mes atual
+    //Pega o indice 3 e 4 da data para comparar com o mes atual
+    const index1 = reference_month.charAt(3);
+    const index2 = reference_month.charAt(4);
+    const expenseMonth = index1 + index2;
 
-    try {
-        const client = await pool.connect();
-        const newExpense = await client.query(
-            'INSERT INTO expenses (description, amount, reference_month, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
-            [description, amount, reference_month, userId]
-        );
-        client.release();
-        res.status(200).json({ message: 'Despesa cadastrada com sucesso!', expense: newExpense.rows[0] })
-    } catch (error) {
-        console.error('Erro ao cadastrar despesa', error);
-        res.status(500).send('Erro ao cadastrar despesa!');
+    if (expenseMonth < month) {
+        res.status(400).send('Não é possível inserir um despesa em um mês anterior ao atual!');
+    } else {
+        try {
+            const client = await pool.connect();
+            await client.query('SET datestyle = "DMY"');
+            const newExpense = await client.query(
+                'INSERT INTO expenses (description, amount, reference_month, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+                [description, amount, reference_month, userId]
+            );
+            client.release();
+            res.status(200).json({ message: 'Despesa cadastrada com sucesso!', expense: newExpense.rows[0] })
+        } catch (error) {
+            console.error('Erro ao cadastrar despesa', error);
+            res.status(500).send('Erro ao cadastrar despesa!');
+        }
     }
 });
 
