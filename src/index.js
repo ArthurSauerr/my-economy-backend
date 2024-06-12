@@ -171,7 +171,6 @@ app.get('/expense/mes/:month', validateToken, async (req, res) => {
     const { month } = req.params;
 
     try {
-        // Verifica se o parâmetro de mês está no formato YYYY-MM
         if (!/^\d{4}-\d{2}$/.test(month)) {
             return res.status(400).send('Formato do mês inválido. Use o formato YYYY-MM.');
         }
