@@ -14,9 +14,9 @@ dotenv.config();
 
 const { Pool } = require('pg');
 const pool = new Pool({
-    user: 'arthur',
+    user: 'postgres',
     host: 'localhost',
-    database: 'myeconomydb',
+    database: 'postgres',
     password: 'root',
     port: 5432
 });
@@ -275,6 +275,79 @@ app.delete('/expense/delete', validateToken, async (req, res) => {
             console.error('Erro ao excluir despesa', error);
             res.status(500).send('Erro ao excluir despesa!');
         }
+    }
+});
+
+// ------ENDPOINTS LIMITE------
+
+app.post('/limit/create', validateToken, async(req, res) => {
+    const { reference_month, limit_amount } = req.body;
+    const userId = req.user.id;
+
+    const index1 = reference_month.charAt(3);
+    const index2 = reference_month.charAt(4);
+    const limitMonth = index1 + index2;
+
+    if (limitMonth < month) {
+        res.status(400).send('Não é possível inserir um limite em um mês anterior ao atual!')
+    } else {
+        try {
+            const client = await pool.connect();
+            await client.query('SET datestyle = "DMY"');
+            const limitExists = await client.query(
+                'SELECT * FROM user_limit WHERE user_id = $1 AND EXTRACT(MONTH FROM reference_month) = $2',
+                [userId, limitMonth]
+            );
+            if (limitExists.rows.length > 0) {
+                client.release();
+                res.status(400).send('Já existe um limite inserido nesse mês')
+            } else {
+                await client.query('SET datestyle = "DMY"');
+                const newLimit = await client.query(
+                    'INSERT INTO user_limit (user_id, reference_month, limit_amount) VALUES ($1, $2, $3) RETURNING *',
+                    [userId, reference_month, limit_amount]
+                );
+                client.release();
+                res.status(200).json({ message: 'Limite cadastrado com sucesso!', limit: newLimit.rows[0] })
+            }
+        } catch (error) {
+            res.status(500).send('Erro ao inserir um limite!');
+            console.error('Erro ao inserir limite', error);
+        }
+    }
+});
+
+app.get('/limit', validateToken, async (req, res) => {
+    const userId = req.user.id;
+
+    try { 
+        const client = await pool.connect();
+        const read = await client.query(
+            'SELECT * FROM user_limit WHERE user_id = $1',
+            [userId]
+        );
+        client.release();
+        res.status(200).json({ limits: read.rows })
+    } catch (error) {
+        res.status(500).send('Erro ao buscar limites');
+        console.error('Erro ao buscar limites', error);
+    }
+});
+
+app.get('/limit/today', validateToken, async (req, res) => {
+    const userId = req.user.id;
+
+    try { 
+        const client = await pool.connect();
+        const read = await client.query(
+            'SELECT * FROM user_limit WHERE user_id = $1 AND EXTRACT(MONTH FROM reference_month) = $2',
+            [userId, month]
+        );
+        client.release();
+        res.status(200).json({ limits: read.rows })
+    } catch (error) {
+        res.status(500).send('Erro ao buscar limites');
+        console.error('Erro ao buscar limites', error);
     }
 });
 
