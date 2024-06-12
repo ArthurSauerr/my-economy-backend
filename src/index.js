@@ -185,6 +185,29 @@ app.get('/user', validateToken, async (req, res) => {
 
 // ------ENDPOINTS DESPESAS------
 
+app.get('/expense/mes/:month', validateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { month } = req.params;
+
+    try {
+        if (!/^\d{4}-\d{2}$/.test(month)) {
+            return res.status(400).send('Formato do mês inválido. Use o formato YYYY-MM.');
+        }
+
+        const client = await pool.connect();
+        const read = await client.query(
+            `SELECT * FROM expenses WHERE user_id = $1 AND TO_CHAR(reference_month, 'YYYY-MM') = $2`, 
+            [userId, month]
+        );
+        client.release();
+        res.status(200).json({ expenses: read.rows });
+    } catch (error) {
+        console.error('Erro ao listar despesas', error);
+        res.status(500).send('Erro ao listar despesas do usuário!');
+    }
+});
+
+
 app.post('/expense/create', validateToken, async (req, res) => {
     const { description, amount, reference_month } = req.body;
     const userId = req.user.id;
