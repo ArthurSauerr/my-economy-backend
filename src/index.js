@@ -14,10 +14,10 @@ dotenv.config();
 
 const { Pool } = require('pg');
 const pool = new Pool({
-    user: 'postgres',
+    user: 'arthur',
     host: 'localhost',
     database: 'myeconomydb',
-    password: 'admin',
+    password: 'root',
     port: 5432
 });
 
@@ -89,6 +89,25 @@ async function checkMonth(id) {
         return false;
     } catch (error) {
         console.error('Erro na funçao checkMonth', error);
+        return false;
+    }
+}
+
+async function checkMonthLimit(id) {
+    try {
+        const client = await pool.connect();
+        const limitMonthResult = await client.query(
+            'SELECT EXTRACT (MONTH FROM reference_month) AS month FROM user_limit WHERE id = $1',
+            [id]
+        );
+        client.release();
+        if (limitMonthResult.rows.length > 0) {
+            const limitMonth = limitMonthResult.rows[0].month;
+            return limitMonth < month;
+        }
+        return false;
+    } catch (error) {
+        console.error('Erro ao checar mês do Limite', error);
         return false;
     }
 }
@@ -349,6 +368,69 @@ app.get('/limit/today', validateToken, async (req, res) => {
         res.status(500).send('Erro ao buscar limites');
         console.error('Erro ao buscar limites', error);
     }
+});
+
+app.put('/limit/update', validateToken, async (req, res) => {
+    const { id, limit_amount } = req.body;
+    const isOlderMonth = await checkMonthLimit(id);
+
+    if (isOlderMonth) {
+        res.status(400).send('Não é possível atualizar um limite antigo!');
+    } else {
+        try {
+            const client = await pool.connect();
+            const limitExists = await client.query(
+                'SELECT * FROM user_limit WHERE id = $1',
+                [id]
+            );
+            if (limitExists.rows.length > 0) {
+                if (limit_amount == null) {
+                    res.status(400).send('Preencha o campo de limite para pode atualizar!');
+                } else {
+                    await client.query(
+                        'UPDATE user_limit SET limit_amount = $1 WHERE id = $2',
+                        [limit_amount, id]
+                    );
+                    client.release();
+                    res.status(200).send('Limite atualizado com sucesso!');
+                }
+            } else {
+                client.release();
+                res.status(400).send('Esse limite não existe!');
+            }
+        } catch (error) {
+            res.status(500).send('Erro ao atualizar limite');
+            console.error('Erro ao atualizar limite', error);
+        }
+    }
+});
+
+app.delete("/limit/delete", validateToken, async (req, res) => {
+  const { id } = req.body;
+  const isOlderMonth = await checkMonthLimit(id);
+
+  if (isOlderMonth) {
+    res.status(400).send("Não é possível excluir um limite antigo!");
+  } else {
+    try {
+      const client = await pool.connect();
+      const limitExists = await client.query(
+        "SELECT * FROM user_limit WHERE id = $1",
+        [id]
+      );
+      if (limitExists.rows.length > 0) {
+        await client.query("DELETE FROM user_limit WHERE id = $1", [id]);
+        client.release();
+        res.status(200).send("Limite excluído com sucesso!");
+      } else {
+        client.release();
+        res.status(400).send("Esse limite não existe!");
+      }
+    } catch (error) {
+      console.error("Erro ao excluir limite", error);
+      res.status(500).send("Erro ao excluir limite!");
+    }
+  }
 });
 
 app.listen(port, () => {
