@@ -189,21 +189,31 @@ app.get('/expense/mes/:month', validateToken, async (req, res) => {
     const userId = req.user.id;
     const { month } = req.params;
 
-    try {
-        if (!/^\d{4}-\d{2}$/.test(month)) {
-            return res.status(400).send('Formato do mês inválido. Use o formato YYYY-MM.');
-        }
 
+    // Validar o formato do mês
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(month)) {
+        return res.status(400).send('Formato do mês inválido. Use o formato DD-MM-YYYY.');
+    }
+
+    // Extrair o mês e ano do parâmetro
+    const [day, monthPart, year] = month.split('-');
+    const formattedMonth = `${year}-${monthPart}`;
+
+    try {
         const client = await pool.connect();
         const read = await client.query(
-            `SELECT * FROM expenses WHERE user_id = $1 AND TO_CHAR(reference_month, 'YYYY-MM') = $2`, 
-            [userId, month]
+            `SELECT * FROM expenses WHERE user_id = $1 AND TO_CHAR(reference_month, 'YYYY-MM') = $2`,
+            [userId, formattedMonth]
         );
         client.release();
-        res.status(200).json({ expenses: read.rows });
+        if (read.rows.length > 0) {
+            res.status(200).json({ limits: read.rows });
+        } else {
+            res.status(404).send('Nenhuma despesa encontrada para o mês especificado.');
+        }
     } catch (error) {
-        console.error('Erro ao listar despesas', error);
-        res.status(500).send('Erro ao listar despesas do usuário!');
+        res.status(500).send('Erro ao buscar despesas');
+        console.error('Erro ao buscar despesas', error);
     }
 });
 
@@ -392,6 +402,39 @@ app.get('/limit/today', validateToken, async (req, res) => {
         console.error('Erro ao buscar limites', error);
     }
 });
+
+app.get('/limit/mes/:month', validateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { month } = req.params;
+
+    // Validar o formato do mês
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(month)) {
+        return res.status(400).send('Formato do mês inválido. Use o formato DD-MM-YYYY.');
+    }
+
+    // Extrair o mês e ano do parâmetro
+    const [day, monthPart, year] = month.split('-');
+    const formattedMonth = `${year}-${monthPart}`;
+
+    try {
+        const client = await pool.connect();
+        const read = await client.query(
+            `SELECT * FROM user_limit WHERE user_id = $1 AND TO_CHAR(reference_month, 'YYYY-MM') = $2`,
+            [userId, formattedMonth]
+        );
+        client.release();
+        if (read.rows.length > 0) {
+            res.status(200).json({ limits: read.rows });
+        } else {
+            res.status(404).send('Nenhum limite encontrado para o mês especificado.');
+        }
+    } catch (error) {
+        res.status(500).send('Erro ao buscar limites');
+        console.error('Erro ao buscar limites', error);
+    }
+});
+
+
 
 app.put('/limit/update', validateToken, async (req, res) => {
     const { id, limit_amount } = req.body;
